@@ -1,213 +1,211 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-  <title>Dental Animation</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    html {
-      width: 100%;
-      height: auto;
-      background: #06090e;
-      overflow-x: hidden;
-    }
-    body {
-      width: 100%;
-      min-height: 500vh;
-      min-height: 500dvh;
-      background: #06090e;
-      position: relative;
-      overflow-x: hidden;
-    }
-    canvas {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      width: 100dvw;
-      height: 100vh;
-      height: 100dvh;
-      display: block;
-      pointer-events: none;
-      z-index: 1;
-    }
-  </style>
-</head>
-<body>
-  <canvas id="canvas"></canvas>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
+    />
+    <title>Dental Animation</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        width: 100%;
+        height: auto;
+        background: #06090e;
+        overflow-x: hidden;
+      }
+      body {
+        width: 100%;
+        min-height: 500vh;
+        min-height: 500dvh;
+        background: #06090e;
+        position: relative;
+        overflow-x: hidden;
+      }
+      canvas {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        width: 100dvw;
+        height: 100vh;
+        height: 100dvh;
+        display: block;
+        pointer-events: none;
+        z-index: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
 
-  <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const frameCount = 118;
+    <script>
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const frameCount = 118;
 
-    // Helper offscreen canvas for high-performance ambient glow across all aspect ratios
-    const ambientCanvas = document.createElement('canvas');
-    ambientCanvas.width = 120;
-    ambientCanvas.height = 68;
-    const ambientCtx = ambientCanvas.getContext('2d');
+      const pad = (n, width) => n.toString().padStart(width, "0");
+      const getFrameUrl = (idx) => `let/ezgif-frame-${pad(idx, 3)}.jpg`;
 
-    const pad = (n, width) => n.toString().padStart(width, '0');
-    const getFrameUrl = (idx) => `let/ezgif-frame-${pad(idx, 3)}.jpg`;
+      const images = new Array(frameCount);
+      let loadedCount = 0;
+      let currentProgress = 0;
+      let targetProgress = 0;
+      let lastRenderedIndex = -1;
 
-    const images = new Array(frameCount);
-    let loadedCount = 0;
-    let currentProgress = 0;
-    let targetProgress = 0;
-    let lastRenderedIndex = -1;
+      // Responsive canvas resolution matching DPR and screen orientation (portrait vs landscape)
+      function resizeCanvas() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const vpWidth = window.visualViewport
+          ? window.visualViewport.width
+          : window.innerWidth;
+        const vpHeight = window.visualViewport
+          ? window.visualViewport.height
+          : window.innerHeight;
 
-    // Adaptive canvas resolution supporting DPR and dynamic viewport size (portrait, mobile, ultrawide)
-    function resizeCanvas() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const vpWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-      const vpHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        canvas.width = Math.floor(vpWidth * dpr);
+        canvas.height = Math.floor(vpHeight * dpr);
 
-      canvas.width = Math.floor(vpWidth * dpr);
-      canvas.height = Math.floor(vpHeight * dpr);
+        lastRenderedIndex = -1; // force redraw
+        renderFrame(Math.round(currentProgress * (frameCount - 1)));
+      }
 
-      lastRenderedIndex = -1; // force redraw on resize/orientation change
-      renderFrame(Math.round(currentProgress * (frameCount - 1)));
-    }
-
-    // Preload all frames
-    for (let i = 0; i < frameCount; i++) {
-      const img = new Image();
-      img.src = getFrameUrl(i + 1);
-      img.onload = () => {
-        loadedCount++;
+      // Preload all frames
+      for (let i = 0; i < frameCount; i++) {
+        const img = new Image();
+        img.src = getFrameUrl(i + 1);
+        img.onload = () => {
+          loadedCount++;
+          images[i] = img;
+          const curIdx = Math.round(currentProgress * (frameCount - 1));
+          if (i === 0 || i === curIdx) {
+            renderFrame(curIdx);
+          }
+        };
         images[i] = img;
-        const curIdx = Math.round(currentProgress * (frameCount - 1));
-        if (i === 0 || i === curIdx) {
-          renderFrame(curIdx);
-        }
-      };
-      images[i] = img;
-    }
-
-    // Cross-browser scroll progress calculation
-    function getScrollProgress() {
-      const scrollY = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
-      const docHeight = Math.max(
-        document.body.scrollHeight,
-        document.documentElement.scrollHeight
-      );
-      const vpHeight = window.innerHeight || document.documentElement.clientHeight || 1;
-      const maxScroll = docHeight - vpHeight;
-      return maxScroll > 0 ? Math.max(0, Math.min(1, scrollY / maxScroll)) : 0;
-    }
-
-    function renderFrame(index) {
-      const clampedIndex = Math.max(0, Math.min(frameCount - 1, index));
-
-      // Get target image or nearest loaded neighbor
-      let img = images[clampedIndex];
-      if (!img || !img.complete || img.naturalWidth === 0) {
-        for (let offset = 1; offset < frameCount; offset++) {
-          const prev = clampedIndex - offset;
-          const next = clampedIndex + offset;
-          if (prev >= 0 && images[prev] && images[prev].complete && images[prev].naturalWidth > 0) {
-            img = images[prev];
-            break;
-          }
-          if (next < frameCount && images[next] && images[next].complete && images[next].naturalWidth > 0) {
-            img = images[next];
-            break;
-          }
-        }
       }
 
-      if (!img || !img.complete || img.naturalWidth === 0) return;
+      // Smooth scroll progress calculation
+      function getScrollProgress() {
+        const scrollY =
+          window.pageYOffset ||
+          document.documentElement.scrollTop ||
+          document.body.scrollTop ||
+          0;
+        const docHeight = Math.max(
+          document.body.scrollHeight,
+          document.documentElement.scrollHeight,
+        );
+        const vpHeight =
+          window.innerHeight || document.documentElement.clientHeight || 1;
+        const maxScroll = docHeight - vpHeight;
+        return maxScroll > 0
+          ? Math.max(0, Math.min(1, scrollY / maxScroll))
+          : 0;
+      }
 
-      const cw = canvas.width;
-      const ch = canvas.height;
-      const iw = img.naturalWidth;
-      const ih = img.naturalHeight;
+      function renderFrame(index) {
+        const clampedIndex = Math.max(0, Math.min(frameCount - 1, index));
 
-      const screenAspect = cw / ch;
-      const imageAspect = iw / ih;
+        // Get target image or nearest loaded neighbor
+        let img = images[clampedIndex];
+        if (!img || !img.complete || img.naturalWidth === 0) {
+          for (let offset = 1; offset < frameCount; offset++) {
+            const prev = clampedIndex - offset;
+            const next = clampedIndex + offset;
+            if (
+              prev >= 0 &&
+              images[prev] &&
+              images[prev].complete &&
+              images[prev].naturalWidth > 0
+            ) {
+              img = images[prev];
+              break;
+            }
+            if (
+              next < frameCount &&
+              images[next] &&
+              images[next].complete &&
+              images[next].naturalWidth > 0
+            ) {
+              img = images[next];
+              break;
+            }
+          }
+        }
 
-      ctx.clearRect(0, 0, cw, ch);
+        if (!img || !img.complete || img.naturalWidth === 0) return;
 
-      // Check if aspect ratios diverge (e.g. mobile portrait, ultrawide, tablet)
-      const aspectDiff = Math.abs(screenAspect - imageAspect);
+        const cw = canvas.width;
+        const ch = canvas.height;
+        const iw = img.naturalWidth;
+        const ih = img.naturalHeight;
 
-      if (aspectDiff > 0.02) {
-        // 1. Ambient Dynamic Fill: expands to cover the full viewport with smooth lighting
-        const bgScale = Math.max(cw / iw, ch / ih);
-        const bgW = iw * bgScale;
-        const bgH = ih * bgScale;
-        const bgX = (cw - bgW) / 2;
-        const bgY = (ch - bgH) / 2;
+        ctx.clearRect(0, 0, cw, ch);
 
-        ambientCtx.drawImage(img, 0, 0, ambientCanvas.width, ambientCanvas.height);
+        // On phone and tablet in portrait mode (or any portrait viewport):
+        // Formats as an immersive, full-bleed portrait experience filling the vertical screen.
+        // On desktop and landscape viewports: formats as an edge-to-edge landscape experience.
+        const scale = Math.max(cw / iw, ch / ih);
+        const drawWidth = iw * scale;
+        const drawHeight = ih * scale;
+        const offsetX = (cw - drawWidth) / 2;
+        const offsetY = (ch - drawHeight) / 2;
 
+        ctx.drawImage(
+          img,
+          0,
+          0,
+          iw,
+          ih,
+          offsetX,
+          offsetY,
+          drawWidth,
+          drawHeight,
+        );
+
+        // Subtle cyan/sky-blue tint wash across the viewport
+        // 3. Subtle black tint overlay
         ctx.save();
-        ctx.filter = 'blur(30px) brightness(0.4) saturate(1.3)';
-        ctx.drawImage(ambientCanvas, 0, 0, ambientCanvas.width, ambientCanvas.height, bgX, bgY, bgW, bgH);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.50)";
+        ctx.fillRect(0, 0, cw, ch);
         ctx.restore();
+
+        lastRenderedIndex = clampedIndex;
       }
 
-      // 2. Main High-Resolution Frame: perfectly contained so NO part of the animation is ever cropped
-      const fgScale = Math.min(cw / iw, ch / ih);
-      const fgW = iw * fgScale;
-      const fgH = ih * fgScale;
-      const fgX = (cw - fgW) / 2;
-      const fgY = (ch - fgH) / 2;
-
-      ctx.save();
-      if (aspectDiff > 0.02) {
-        // Subtle depth shadow framing the model on non-16:9 viewports
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-        ctx.shadowBlur = 25 * (cw / window.innerWidth);
+      window.addEventListener("resize", resizeCanvas);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener("resize", resizeCanvas);
       }
-      ctx.drawImage(img, 0, 0, iw, ih, fgX, fgY, fgW, fgH);
-      ctx.restore();
+      window.addEventListener("orientationchange", resizeCanvas);
 
-      // 3. Cohesive subtle cyan/sky-blue tint wash across the entire canvas
-      ctx.save();
-      const tintGradient = ctx.createLinearGradient(0, 0, cw, ch);
-      tintGradient.addColorStop(0, 'rgba(6, 182, 212, 0.16)');
-      tintGradient.addColorStop(0.5, 'rgba(14, 165, 233, 0.12)');
-      tintGradient.addColorStop(1, 'rgba(99, 102, 241, 0.15)');
-      ctx.fillStyle = tintGradient;
-      ctx.fillRect(0, 0, cw, ch);
-      ctx.restore();
+      // Continuous smooth animation loop with momentum lerp
+      const LERP = 0.12;
 
-      lastRenderedIndex = clampedIndex;
-    }
+      function animate() {
+        targetProgress = getScrollProgress();
+        currentProgress += (targetProgress - currentProgress) * LERP;
 
-    window.addEventListener('resize', resizeCanvas);
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', resizeCanvas);
-    }
-    window.addEventListener('orientationchange', resizeCanvas);
+        if (Math.abs(targetProgress - currentProgress) < 0.0001) {
+          currentProgress = targetProgress;
+        }
 
-    // Continuous smooth animation loop with momentum lerp
-    const LERP = 0.12;
+        const frameIdx = Math.round(currentProgress * (frameCount - 1));
+        if (frameIdx !== lastRenderedIndex) {
+          renderFrame(frameIdx);
+        }
 
-    function animate() {
-      targetProgress = getScrollProgress();
-      currentProgress += (targetProgress - currentProgress) * LERP;
-
-      if (Math.abs(targetProgress - currentProgress) < 0.0001) {
-        currentProgress = targetProgress;
+        requestAnimationFrame(animate);
       }
 
-      const frameIdx = Math.round(currentProgress * (frameCount - 1));
-      if (frameIdx !== lastRenderedIndex) {
-        renderFrame(frameIdx);
-      }
-
+      resizeCanvas();
       requestAnimationFrame(animate);
-    }
-
-    resizeCanvas();
-    requestAnimationFrame(animate);
-  </script>
-</body>
+    </script>
+  </body>
 </html>
