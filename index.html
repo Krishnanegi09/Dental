@@ -111,6 +111,12 @@
 
       if (!ctx) return;
 
+      // Offscreen canvas for ultra-fast ambient background fill on portrait viewports
+      const ambientCanvas = document.createElement("canvas");
+      ambientCanvas.width = 120;
+      ambientCanvas.height = 68;
+      const ambientCtx = ambientCanvas.getContext("2d", { alpha: false });
+
       const frames = new Array(CONFIG.frameCount);
 
       let currentProgress = 0;
@@ -294,7 +300,7 @@
       }
 
       // ==============================
-      // FULL-BLEED CENTERED RENDERING ENGINE
+      // EXACT CENTERED LOGO RENDERING ENGINE
       // ==============================
 
       function renderFrame(index) {
@@ -313,27 +319,78 @@
         const iw = img.naturalWidth || 1920;
         const ih = img.naturalHeight || 1080;
 
-        // Full bleed edge-to-edge cover scaling across all screen sizes and aspect ratios
-        const scale = Math.max(cw / iw, ch / ih);
-        const drawWidth = iw * scale;
-        const drawHeight = ih * scale;
+        const screenAspect = cw / ch;
 
-        // Perfectly centered horizontally and vertically
-        const offsetX = (cw - drawWidth) / 2;
-        const offsetY = (ch - drawHeight) / 2;
-
-        // Draw background base
+        // Reset canvas background
         ctx.fillStyle = "#06090e";
         ctx.fillRect(0, 0, cw, ch);
 
-        // Draw centered full-bleed frame
-        ctx.drawImage(
-          img,
-          offsetX,
-          offsetY,
-          drawWidth,
-          drawHeight
-        );
+        let fgScale, fgOffsetX, fgOffsetY;
+
+        if (screenAspect < 1.0) {
+          // ========================================================
+          // PORTRAIT VIEWPORTS (Phones, Phablets, Portrait Tablets)
+          // ========================================================
+          // Complete Molar House logo geometry:
+          // Letter 'M' is at X=557, Letter 'E' is at X=1257
+          // Width = 700px, Exact Horizontal Center = 907
+          // House icon top is at Y=150, subtext bottom is at Y=630
+          // Height = 480px, Exact Vertical Center = 390
+          const LOGO_WIDTH = 700;
+          const LOGO_CENTER_X = 907;
+          const LOGO_CENTER_Y = 390;
+
+          // Scale so the complete logo occupies 88% of mobile width with perfectly balanced margins
+          fgScale = (cw * 0.88) / LOGO_WIDTH;
+          const fgW = iw * fgScale;
+          const fgH = ih * fgScale;
+
+          // Transition focal Y gently as the user scrolls into the clinic interior
+          const focalY = LOGO_CENTER_Y + (540 - LOGO_CENTER_Y) * Math.min(1, currentProgress * 2.5);
+
+          // Perfectly centered in the dead middle of the mobile screen
+          fgOffsetX = (cw / 2) - (LOGO_CENTER_X * fgScale);
+          fgOffsetY = (ch / 2) - (focalY * fgScale);
+
+          // Full-bleed ambient backdrop filling entire screen edge-to-edge
+          if (ambientCtx) {
+            ambientCtx.drawImage(img, 0, 0, ambientCanvas.width, ambientCanvas.height);
+            const bgScale = Math.max(cw / iw, ch / ih);
+            const bgW = iw * bgScale;
+            const bgH = ih * bgScale;
+            const bgX = (cw - bgW) / 2;
+            const bgY = (ch - bgH) / 2;
+
+            ctx.save();
+            ctx.filter = "blur(28px) brightness(0.42) saturate(1.2)";
+            ctx.drawImage(
+              ambientCanvas,
+              0, 0, ambientCanvas.width, ambientCanvas.height,
+              bgX, bgY, bgW, bgH
+            );
+            ctx.restore();
+          }
+
+          // Render centered sharp frame with depth framing
+          ctx.save();
+          ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
+          ctx.shadowBlur = 28;
+          ctx.drawImage(img, fgOffsetX, fgOffsetY, fgW, fgH);
+          ctx.restore();
+
+        } else {
+          // ========================================================
+          // LANDSCAPE VIEWPORTS (Laptops, Desktops, Ultrawide, Tablets)
+          // ========================================================
+          fgScale = Math.max(cw / iw, ch / ih);
+          const fgW = iw * fgScale;
+          const fgH = ih * fgScale;
+
+          fgOffsetX = (cw - fgW) / 2;
+          fgOffsetY = (ch - fgH) / 2;
+
+          ctx.drawImage(img, fgOffsetX, fgOffsetY, fgW, fgH);
+        }
 
         // Tint overlay
         if (CONFIG.tintOpacity > 0) {
