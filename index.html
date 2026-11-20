@@ -1,211 +1,423 @@
+
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
-    />
-    <title>Dental Animation</title>
-    <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      html {
-        width: 100%;
-        height: auto;
-        background: #06090e;
-        overflow-x: hidden;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
+  <meta name="theme-color" content="#06090e" />
+  <title>Responsive Dental Animation</title>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      width: 100%;
+      min-height: 100%;
+      background: #06090e;
+      overflow-x: clip;
+      overscroll-behavior-x: none;
+    }
+
+    body {
+      width: 100%;
+      min-height: 500vh;
+      min-height: 500dvh;
+      background: #06090e;
+      overflow-x: clip;
+      position: relative;
+    }
+
+    #canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
       body {
-        width: 100%;
-        min-height: 500vh;
-        min-height: 500dvh;
-        background: #06090e;
-        position: relative;
-        overflow-x: hidden;
+        scroll-behavior: auto;
       }
-      canvas {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        width: 100dvw;
-        height: 100vh;
-        height: 100dvh;
-        display: block;
-        pointer-events: none;
-        z-index: 1;
-      }
-    </style>
-  </head>
-  <body>
-    <canvas id="canvas"></canvas>
+    }
+  </style>
+</head>
 
-    <script>
+<body>
+
+  <canvas id="canvas"></canvas>
+
+  <script>
+    (() => {
+      "use strict";
+
+      // ==============================
+      // CONFIGURATION
+      // ==============================
+
+      const CONFIG = {
+        frameCount: 118,
+        framePath: "let/ezgif-frame-",
+        frameExtension: ".jpg",
+
+        scrollHeight: 500,
+
+        // Black tint opacity
+        tintOpacity: 0.35,
+
+        // Smoothness
+        lerp: 0.12,
+
+        // Maximum device pixel ratio
+        maxDPR: 2,
+
+        // Image loading batch
+        batchSize: 12
+      };
+
       const canvas = document.getElementById("canvas");
-      const ctx = canvas.getContext("2d");
-      const frameCount = 118;
+      const ctx = canvas.getContext("2d", {
+        alpha: false,
+        desynchronized: true
+      });
 
-      const pad = (n, width) => n.toString().padStart(width, "0");
-      const getFrameUrl = (idx) => `let/ezgif-frame-${pad(idx, 3)}.jpg`;
+      if (!ctx) return;
 
-      const images = new Array(frameCount);
-      let loadedCount = 0;
+      const frames = new Array(CONFIG.frameCount);
+
       let currentProgress = 0;
       let targetProgress = 0;
       let lastRenderedIndex = -1;
 
-      // Responsive canvas resolution matching DPR and screen orientation (portrait vs landscape)
-      function resizeCanvas() {
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const vpWidth = window.visualViewport
-          ? window.visualViewport.width
-          : window.innerWidth;
-        const vpHeight = window.visualViewport
-          ? window.visualViewport.height
-          : window.innerHeight;
+      let viewportWidth = 0;
+      let viewportHeight = 0;
+      let dpr = 1;
 
-        canvas.width = Math.floor(vpWidth * dpr);
-        canvas.height = Math.floor(vpHeight * dpr);
+      let animationStarted = false;
+      let loadingStarted = false;
 
-        lastRenderedIndex = -1; // force redraw
-        renderFrame(Math.round(currentProgress * (frameCount - 1)));
-      }
+      // ==============================
+      // FRAME URL
+      // ==============================
 
-      // Preload all frames
-      for (let i = 0; i < frameCount; i++) {
-        const img = new Image();
-        img.src = getFrameUrl(i + 1);
-        img.onload = () => {
-          loadedCount++;
-          images[i] = img;
-          const curIdx = Math.round(currentProgress * (frameCount - 1));
-          if (i === 0 || i === curIdx) {
-            renderFrame(curIdx);
-          }
-        };
-        images[i] = img;
-      }
-
-      // Smooth scroll progress calculation
-      function getScrollProgress() {
-        const scrollY =
-          window.pageYOffset ||
-          document.documentElement.scrollTop ||
-          document.body.scrollTop ||
-          0;
-        const docHeight = Math.max(
-          document.body.scrollHeight,
-          document.documentElement.scrollHeight,
+      function getFrameURL(index) {
+        return (
+          CONFIG.framePath +
+          String(index).padStart(3, "0") +
+          CONFIG.frameExtension
         );
-        const vpHeight =
-          window.innerHeight || document.documentElement.clientHeight || 1;
-        const maxScroll = docHeight - vpHeight;
-        return maxScroll > 0
-          ? Math.max(0, Math.min(1, scrollY / maxScroll))
-          : 0;
       }
 
-      function renderFrame(index) {
-        const clampedIndex = Math.max(0, Math.min(frameCount - 1, index));
+      // ==============================
+      // RESPONSIVE CANVAS
+      // ==============================
 
-        // Get target image or nearest loaded neighbor
-        let img = images[clampedIndex];
-        if (!img || !img.complete || img.naturalWidth === 0) {
-          for (let offset = 1; offset < frameCount; offset++) {
-            const prev = clampedIndex - offset;
-            const next = clampedIndex + offset;
-            if (
-              prev >= 0 &&
-              images[prev] &&
-              images[prev].complete &&
-              images[prev].naturalWidth > 0
-            ) {
-              img = images[prev];
-              break;
+      function resizeCanvas() {
+        const viewport = window.visualViewport;
+
+        viewportWidth = Math.round(
+          viewport ? viewport.width : window.innerWidth
+        );
+
+        viewportHeight = Math.round(
+          viewport ? viewport.height : window.innerHeight
+        );
+
+        dpr = Math.min(
+          window.devicePixelRatio || 1,
+          CONFIG.maxDPR
+        );
+
+        const newWidth = Math.round(viewportWidth * dpr);
+        const newHeight = Math.round(viewportHeight * dpr);
+
+        if (
+          canvas.width !== newWidth ||
+          canvas.height !== newHeight
+        ) {
+          canvas.width = newWidth;
+          canvas.height = newHeight;
+        }
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        lastRenderedIndex = -1;
+
+        renderFrame(
+          Math.round(currentProgress * (CONFIG.frameCount - 1))
+        );
+      }
+
+      // ==============================
+      // IMAGE LOADING
+      // ==============================
+
+      function loadFrame(index) {
+        return new Promise((resolve) => {
+          const img = new Image();
+
+          img.decoding = "async";
+
+          img.onload = async () => {
+            try {
+              if (img.decode) {
+                await img.decode();
+              }
+
+              frames[index - 1] = img;
+
+              if (index === 1) {
+                renderFrame(0);
+              }
+
+              resolve(true);
+            } catch {
+              frames[index - 1] = img;
+              resolve(true);
             }
-            if (
-              next < frameCount &&
-              images[next] &&
-              images[next].complete &&
-              images[next].naturalWidth > 0
-            ) {
-              img = images[next];
-              break;
-            }
+          };
+
+          img.onerror = () => {
+            console.warn(
+              `Unable to load animation frame: ${index}`
+            );
+            resolve(false);
+          };
+
+          img.src = getFrameURL(index);
+        });
+      }
+
+      async function preloadFrames() {
+        if (loadingStarted) return;
+
+        loadingStarted = true;
+
+        // Load first frame immediately
+        await loadFrame(1);
+
+        // Load remaining frames in batches
+        for (
+          let start = 2;
+          start <= CONFIG.frameCount;
+          start += CONFIG.batchSize
+        ) {
+          const end = Math.min(
+            start + CONFIG.batchSize - 1,
+            CONFIG.frameCount
+          );
+
+          const batch = [];
+
+          for (let i = start; i <= end; i++) {
+            batch.push(loadFrame(i));
+          }
+
+          await Promise.all(batch);
+        }
+      }
+
+      // ==============================
+      // SCROLL PROGRESS
+      // ==============================
+
+      function getScrollProgress() {
+        const scrollY = window.scrollY || 0;
+
+        const maxScroll = Math.max(
+          1,
+          document.documentElement.scrollHeight -
+          window.innerHeight
+        );
+
+        return Math.max(
+          0,
+          Math.min(1, scrollY / maxScroll)
+        );
+      }
+
+      // ==============================
+      // FIND AVAILABLE FRAME
+      // ==============================
+
+      function getAvailableFrame(index) {
+        if (
+          frames[index] &&
+          frames[index].complete &&
+          frames[index].naturalWidth > 0
+        ) {
+          return frames[index];
+        }
+
+        for (let offset = 1; offset < CONFIG.frameCount; offset++) {
+          const previous = index - offset;
+          const next = index + offset;
+
+          if (
+            previous >= 0 &&
+            frames[previous] &&
+            frames[previous].complete &&
+            frames[previous].naturalWidth > 0
+          ) {
+            return frames[previous];
+          }
+
+          if (
+            next < CONFIG.frameCount &&
+            frames[next] &&
+            frames[next].complete &&
+            frames[next].naturalWidth > 0
+          ) {
+            return frames[next];
           }
         }
 
-        if (!img || !img.complete || img.naturalWidth === 0) return;
+        return null;
+      }
 
-        const cw = canvas.width;
-        const ch = canvas.height;
+      // ==============================
+      // RENDER FRAME
+      // ==============================
+
+      function renderFrame(index) {
+        const frameIndex = Math.max(
+          0,
+          Math.min(CONFIG.frameCount - 1, index)
+        );
+
+        const img = getAvailableFrame(frameIndex);
+
+        if (!img) return;
+
+        const cw = viewportWidth;
+        const ch = viewportHeight;
+
+        if (!cw || !ch) return;
+
         const iw = img.naturalWidth;
         const ih = img.naturalHeight;
 
-        ctx.clearRect(0, 0, cw, ch);
+        // Adaptive image scaling
+        const scale = Math.max(
+          cw / iw,
+          ch / ih
+        );
 
-        // On phone and tablet in portrait mode (or any portrait viewport):
-        // Formats as an immersive, full-bleed portrait experience filling the vertical screen.
-        // On desktop and landscape viewports: formats as an edge-to-edge landscape experience.
-        const scale = Math.max(cw / iw, ch / ih);
         const drawWidth = iw * scale;
         const drawHeight = ih * scale;
+
         const offsetX = (cw - drawWidth) / 2;
         const offsetY = (ch - drawHeight) / 2;
 
+        // Draw background and image
+        ctx.fillStyle = "#06090e";
+        ctx.fillRect(0, 0, cw, ch);
+
         ctx.drawImage(
           img,
-          0,
-          0,
-          iw,
-          ih,
           offsetX,
           offsetY,
           drawWidth,
-          drawHeight,
+          drawHeight
         );
 
-        // Subtle cyan/sky-blue tint wash across the viewport
-        // 3. Subtle black tint overlay
-        ctx.save();
-        ctx.fillStyle = "rgba(0, 0, 0, 0.50)";
-        ctx.fillRect(0, 0, cw, ch);
-        ctx.restore();
+        // Black tint overlay
+        if (CONFIG.tintOpacity > 0) {
+          ctx.fillStyle =
+            `rgba(0, 0, 0, ${CONFIG.tintOpacity})`;
 
-        lastRenderedIndex = clampedIndex;
+          ctx.fillRect(0, 0, cw, ch);
+        }
+
+        lastRenderedIndex = frameIndex;
       }
 
-      window.addEventListener("resize", resizeCanvas);
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener("resize", resizeCanvas);
-      }
-      window.addEventListener("orientationchange", resizeCanvas);
-
-      // Continuous smooth animation loop with momentum lerp
-      const LERP = 0.12;
+      // ==============================
+      // ANIMATION LOOP
+      // ==============================
 
       function animate() {
         targetProgress = getScrollProgress();
-        currentProgress += (targetProgress - currentProgress) * LERP;
 
-        if (Math.abs(targetProgress - currentProgress) < 0.0001) {
+        currentProgress +=
+          (targetProgress - currentProgress) * CONFIG.lerp;
+
+        if (
+          Math.abs(targetProgress - currentProgress) < 0.0001
+        ) {
           currentProgress = targetProgress;
         }
 
-        const frameIdx = Math.round(currentProgress * (frameCount - 1));
-        if (frameIdx !== lastRenderedIndex) {
-          renderFrame(frameIdx);
+        const frameIndex = Math.round(
+          currentProgress * (CONFIG.frameCount - 1)
+        );
+
+        if (frameIndex !== lastRenderedIndex) {
+          renderFrame(frameIndex);
         }
 
         requestAnimationFrame(animate);
       }
 
-      resizeCanvas();
-      requestAnimationFrame(animate);
-    </script>
-  </body>
+      // ==============================
+      // EVENT LISTENERS
+      // ==============================
+
+      let resizeTimeout;
+
+      function handleResize() {
+        clearTimeout(resizeTimeout);
+
+        resizeTimeout = setTimeout(() => {
+          resizeCanvas();
+        }, 100);
+      }
+
+      window.addEventListener("resize", handleResize, {
+        passive: true
+      });
+
+      window.addEventListener("orientationchange", handleResize, {
+        passive: true
+      });
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener(
+          "resize",
+          handleResize,
+          { passive: true }
+        );
+      }
+
+      // ==============================
+      // INITIALIZATION
+      // ==============================
+
+      function init() {
+        if (animationStarted) return;
+
+        animationStarted = true;
+
+        resizeCanvas();
+
+        requestAnimationFrame(animate);
+
+        preloadFrames();
+      }
+
+      init();
+
+    })();
+  </script>
+
+</body>
 </html>
