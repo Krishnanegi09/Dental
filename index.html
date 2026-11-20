@@ -331,24 +331,21 @@
           // ========================================================
           // PORTRAIT VIEWPORTS (Phones, Phablets, Portrait Tablets)
           // ========================================================
-          // Complete Molar House logo geometry:
-          // Letter 'M' is at X=557, Letter 'E' is at X=1257
-          // Width = 700px, Exact Horizontal Center = 907
-          // House icon top is at Y=150, subtext bottom is at Y=630
-          // Height = 480px, Exact Vertical Center = 390
-          const LOGO_WIDTH = 700;
-          const LOGO_CENTER_X = 907;
-          const LOGO_CENTER_Y = 390;
+          // Full logo geometry: X=[400, 1520] (width 1120), Y=[100, 700] (height 600)
+          // Exact logo center: (960, 400)
+          const LOGO_WIDTH = 1120;
+          const LOGO_CENTER_X = 960;
+          const LOGO_CENTER_Y = 400;
 
-          // Scale so the complete logo occupies 88% of mobile width with perfectly balanced margins
-          fgScale = (cw * 0.88) / LOGO_WIDTH;
+          // Scale so the complete logo occupies 92% of mobile width with perfectly symmetric padding
+          fgScale = (cw * 0.92) / LOGO_WIDTH;
           const fgW = iw * fgScale;
           const fgH = ih * fgScale;
 
-          // Transition focal Y gently as the user scrolls into the clinic interior
+          // Transition focal Y gently from the logo center (400) into the clinic interior (540) as user scrolls
           const focalY = LOGO_CENTER_Y + (540 - LOGO_CENTER_Y) * Math.min(1, currentProgress * 2.5);
 
-          // Perfectly centered in the dead middle of the mobile screen
+          // Perfectly placed in the exact horizontal and vertical middle of the mobile screen
           fgOffsetX = (cw / 2) - (LOGO_CENTER_X * fgScale);
           fgOffsetY = (ch / 2) - (focalY * fgScale);
 
@@ -371,7 +368,7 @@
             ctx.restore();
           }
 
-          // Render centered sharp frame with depth framing
+          // Render centered sharp frame with subtle soft depth framing
           ctx.save();
           ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
           ctx.shadowBlur = 28;
